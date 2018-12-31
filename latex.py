@@ -9,55 +9,14 @@ assignable_colors = [data.Color("blue"), data.Color("brown"), data.Color("cyan")
                      data.Color("pink"), data.Color("purple"), data.Color("teal"), data.Color("violet"),
                      data.Color("yellow")]
 
+extensions = ["png", "jpg", "gif"]
+
 pixels_to_pt = {8: 6, 9: 7, 10: 7.5, 11: 8, 12: 9, 13: 10, 14: 10.5, 15: 11, 16: 12, 17: 13, 18: 13.5, 19: 14, 20: 14.5,
                 21: 15, 22: 16, 23: 17, 24: 18, 25: 19, 36: 27, 48: 36, 50: 37.5}
 
 no_newline_after_tags = ["blockquote"]
 
 DOC_WIDTH_PX = 264
-
-header = """\\documentclass[ebook,12pt,oneside,openany]{memoir}
-\\usepackage[T2A,T1]{fontenc}
-\\usepackage[utf8]{inputenc}
-\\usepackage[russian,english]{babel}
-\\usepackage{graphicx}
-\\usepackage{textgreek}
-\\usepackage{textcomp}
-\\usepackage{url}
-\\usepackage{hyperref}
-\\usepackage[most]{tcolorbox}
-\\usepackage{fancyhdr}
-\\usepackage[paperwidth=441pt,paperheight=666pt,left=72pt,right=72pt,top=77pt,bottom=76pt]{geometry}
-\\usepackage{pifont}
-\\usepackage{amsmath,amssymb,latexsym}
-\\usepackage[normalem]{ulem}
-\\usepackage{arev}
-
-\\hypersetup{colorlinks=true,urlcolor=blue}
-\\urlstyle{same}
-
-\\newcommand{\\carat}{$\\char`\\^$}
-\\newcommand{\\mytexttilde}{\\raisebox{0.5ex}{\\texttildelow}}
-
-\\tcbset{
-    breakable,
-    enhanced jigsaw
-}
-
-\\pagestyle{fancy}
-\\lhead{}
-\\chead{}
-\\rhead{}
-\\renewcommand{\\headrulewidth}{0pt}
-\\cfoot{\\thepage}
-
-\\begin{document}
-
-\\title{Hypnotize Yourself To Be A Pony}
-\\author{Internet}
-
-\\maketitle
-\\newpage"""
 
 
 def set_colors(authors):
@@ -85,18 +44,6 @@ def format_html(div, author: data.Author):
     end = "\\end{tcolorbox}\n"
     newline_allowed = False
     to_ret += format_children(div, False)
-    # for i in range(len(div)):
-    #     element = div[i]
-    #     if element.tag == "blockquote":
-    #         to_ret += format_blockquote(element)
-    #         newline_allowed = False
-    #     elif element.tag == "p":
-    #         if newline_allowed:
-    #             to_ret += format_p(element, True)
-    #         else:
-    #             new_text = format_p(div[i], False)
-    #             newline_allowed = new_text.strip() != ""
-    #             to_ret += new_text
     return to_ret + end
 
 
@@ -231,8 +178,7 @@ def format_style(style: str):
                 else:
                     front += "\\begin{huge}"
                     end = "\\end{huge}" + end
-        elif attribute[
-             :12] == "font-family:" or attribute == "text-align:justify" or attribute == "background-color:transparent":
+        elif attribute[:12] == "font-family:" or attribute[:12] == "margin-left:" or attribute == "text-align:justify" or attribute == "background-color:transparent":
             front += ""  # Do nothing
         elif attribute[:17] == "background-color:":
             if attribute[17:20] == "rgb":
@@ -244,7 +190,7 @@ def format_style(style: str):
         elif attribute.strip() == "":
             front += ""
         else:
-            print("ERROR: Unknown style attribute " + attribute)
+            print("WARNING: Unknown style attribute " + attribute)
     return front, end
 
 
@@ -295,7 +241,8 @@ def format_a(a):
     # print(etree.tostring(a, method="html", encoding="unicode", pretty_print=True))
     to_ret = ""
     if a.get("href") is not None:
-        to_ret += "\\href{" + a.get("href") + "}{"
+        # to_ret += "\\href{" + a.get("href") + "}{"
+        to_ret += "\\href{" + format_arguments(a.get("href")) + "}{"
     to_ret += format_text(a.text)
     to_ret += format_children(a)
     if a.get("href") is not None:
@@ -308,24 +255,38 @@ def format_img(img):
     to_ret = ""
     image_url = img.get("src")
     filename = image_url.split("/")[-1]
-    filename = filename.replace("jpeg", "jpg")
-    dot_split = filename.split(".")
-    filename = dot_split[0] + "." + dot_split[1][:3]
-    filename = "images/" + filename
-    embed_output = embed_image(image_url, filename)
-    if embed_output == "":
+
+    if filename[:14] == "imageproxy.php":
         if "alt" in img.keys():
             to_ret += format_text(img.get("alt"))
         else:
             to_ret += "[missing image]"
     else:
-        to_ret += embed_output
+        filename = filename.replace("jpeg", "jpg")
+        dot_split = filename.split(".")
+        extension_index = 1
+        while dot_split[extension_index][:3].lower() not in extensions:
+            extension_index += 1
+            if extension_index == len(dot_split):
+                print("Error formatting file "+img.get("src"))
+        filename = dot_split[0] + "." + dot_split[extension_index][:3]
+        filename = "images/" + filename
+        embed_output = embed_image(image_url, filename)
+        if embed_output == "":
+            if "alt" in img.keys():
+                to_ret += format_text(img.get("alt"))
+            else:
+                to_ret += "[missing image]"
+        else:
+            to_ret += embed_output
 
     to_ret += format_text(img.tail)
     return to_ret
 
 
 def format_div(div, newline_allowed: bool):
+    if div.get("class") == "ipsQuote_citation":
+        return ""
     to_ret = format_text(div.text)
     to_ret += format_children(div, initial_newline_allowed=(newline_allowed or format_text(div.text).strip() != ""))
     to_ret += format_text(div.tail)
@@ -368,11 +329,12 @@ def format_iframe(iframe):
         embed_output = embed_image("https://img.youtube.com/vi/" + video_code + "/hqdefault.jpg",
                                    "thumbnails/" + video_code + ".jpg")
         if embed_output == "":
-            to_ret += "\\href{https://www.youtube.com/watch?v=" + video_code + "}{[Embedded Video]}"
+            to_ret += "\\href{https://www.youtube.com/watch?v=" + format_arguments(video_code) + "}{[Embedded Video]}"
         else:
-            to_ret += "\\href{https://www.youtube.com/watch?v=" + video_code + "}{" + embed_output + "}"
+            to_ret += "\\href{https://www.youtube.com/watch?v=" + format_arguments(
+                video_code) + "}{" + embed_output + "}"
     else:
-        to_ret += "\\href{https://www.youtube.com/watch?v=" + video_code + "}{" + embed_output + "}"
+        to_ret += "\\href{https://www.youtube.com/watch?v=" + format_arguments(video_code) + "}{" + embed_output + "}"
 
     to_ret += format_text(iframe.tail)
     to_ret += "\n"
@@ -416,14 +378,23 @@ def format_li(li):
 
 
 def embed_image(image_url, filename):
+    filename = filename.replace("%", "p")
+    og_filename = filename
+    if filename[-3:].lower() == "gif":
+        filename = filename[:-3] + "png"
+
     if not os.path.isfile(filename):
         img_data = requests.get(image_url)
         if img_data.status_code == 404:
             return ""
         else:
-            with open(filename, 'wb') as handler:
+            with open(og_filename, 'wb') as handler:
                 handler.write(img_data.content)
             print("Downloading image from " + image_url)
+            if filename != og_filename:
+                img_obj = Image.open(og_filename)
+                img_obj.save(filename)
+                os.remove(og_filename)
 
     if Image.open(filename).size[0] > DOC_WIDTH_PX:
         return "\\includegraphics[width=\\textwidth]{" + filename + "}"
@@ -431,19 +402,52 @@ def embed_image(image_url, filename):
         return "\\includegraphics{" + filename + "}"
 
 
-def format_text(text: str):
+def format_arguments(text: str):
     if text is None or text.strip() == " ":
         return ""
     to_ret = text
-    if "\n" in to_ret or "\t" in to_ret:
-        to_ret = to_ret.strip()
-    to_ret = to_ret.replace("~", "\\mytexttilde{}")
     to_ret = to_ret.replace("$", "\\$")
     to_ret = to_ret.replace("#", "\\#")
     to_ret = to_ret.replace("%", "\\%")
     to_ret = to_ret.replace("_", "\\_")
     to_ret = to_ret.replace("&", "\\&")
-    to_ret = to_ret.replace("^", "\\carat{}")
+    return to_ret
+
+
+def format_text(text: str):
+    if text is None:
+        return ""
+    to_ret = text
     to_ret = to_ret.replace(" ", " ")  # This isn't a space, it's a non-breaking space
+    if "\n" in to_ret or "\t" in to_ret:
+        to_ret = to_ret.strip()
+    to_ret = to_ret.replace("\\", "\\textbackslash{}")
+    to_ret = to_ret.replace("$", "\\$")
+    to_ret = to_ret.replace("#", "\\#")
+    to_ret = to_ret.replace("%", "\\%")
+    to_ret = to_ret.replace("_", "\\_")
+    to_ret = to_ret.replace("&", "\\&")
+    to_ret = to_ret.replace("( ͡° ͜ʖ ͡°)", "\\Lenny{}")
+
+    new_text = ""
+    in_japanese = False
+    for char in to_ret:
+        if int("0x3040", 16) <= ord(char) <= int("0x30FF", 16) or int("0x31F0", 16) <= ord(char) <= int("0x31FF",
+                                                                                                        16) or int(
+                "0xFF00", 16) <= ord(char) <= int("0xFFEF", 16):
+            if not in_japanese:
+                in_japanese = True
+                new_text += "\\begin{CJK}{UTF8}{goth}"
+        elif in_japanese:
+            in_japanese = False
+            new_text += "\\end{CJK}"
+        new_text += char
+    to_ret = new_text
+
     to_ret = to_ret.replace("♥", "\\ding{170}")
+    to_ret = to_ret.replace("☣", "$\\biohazard$")
+    to_ret = to_ret.replace("∞", "$\\infty$")
+    to_ret = to_ret.replace("▽", "$\\triangledown$")
+    to_ret = to_ret.replace("^", "\\carat{}")
+    to_ret = to_ret.replace("~", "\\mytexttilde{}")
     return to_ret

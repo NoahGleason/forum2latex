@@ -16,10 +16,12 @@ def parse_date(datestring):
     return datetime.datetime(year=year, month=month, day=day, hour=hour, minute=minute, second=second)
 
 
-output = open("output.json", "r")
+name = "output"
+
+output = open(name + ".json", "r")
 json_comments = json.loads(output.read())
 parser = etree.HTMLParser()
-html_comments = etree.parse("output.html", parser).getroot()[0]
+html_comments = etree.parse(name + ".html", parser).getroot()[0]
 comments = []
 authors = {}
 
@@ -36,8 +38,11 @@ for i in range(len(json_comments)):
 
 latex.set_colors(authors.values())
 
-writer = open("output.tex", mode="w")
-writer.write(latex.header)
+with open("header.tex", 'r') as reader:
+    header = reader.read()
+
+writer = open(name + ".tex", mode="w")
+writer.write(header)
 count = 0
 for comment in comments:
     count += 1

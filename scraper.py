@@ -5,13 +5,15 @@ import json
 
 parser = etree.HTMLParser()
 base_url = "https://mlpforums.com/topic/47085-hypnotize-yourself-to-be-a-pony-links-included/?page="
-start_page = 301
-max_page = 341
+start_page = 1
+max_page = 10
 
 # json_output = open("output.json", "a")
 # html_output = open("output.html", "ab")
-# json_output.write("[")
-json_output.write(",\n")
+json_output = open("output_test.json", "w")
+html_output = open("output_test.html", "wb")
+json_output.write("[")
+# json_output.write(",\n")
 
 for i in range(start_page, max_page+1):
     page = requests.get(base_url+str(i))
@@ -31,6 +33,6 @@ for i in range(start_page, max_page+1):
                         json_output.write(",\n")
     print("Finished page "+str(i))
 
-# json_output.write("]")
+json_output.write("]")
 json_output.close()
 html_output.close()

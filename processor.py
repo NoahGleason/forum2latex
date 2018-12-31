@@ -34,16 +34,6 @@ for i in range(len(json_comments)):
     comments.append(new_comment)
     authors[author_name].add_comment(new_comment)
 
-# for element in html_comments.iter("blockquote"):
-#     print("Tail: " + str(element.tail).strip())
-#
-# sorted_authors = sorted(authors.values(), key=lambda x: x.get_num_comments(), reverse=True)
-# for author in sorted_authors:
-#     print(author)
-
-# for comment in comments:
-    # print(latex.format_newline(comment.text))
-
 latex.set_colors(authors.values())
 
 writer = open("output.tex", mode="w")
@@ -52,6 +42,8 @@ count = 0
 for comment in comments:
     count += 1
     writer.write(latex.format_html(comment.get_text(), comment.get_author()))
-    print("Finished comment "+str(count)+" of 8514 ("+str(count/8514 * 100.)+"%)")
+    # print("Finished comment "+str(count)+" of 8514 ("+str(count/8514 * 100.)+"%)")
+    if count % 100 == 0:
+        print("Finished comment {0} of 8514 ({1:.2f}%)".format(count, count/8514. * 100.))
 writer.write("\n\\end{document}")
 writer.close()

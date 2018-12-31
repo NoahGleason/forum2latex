@@ -104,3 +104,8 @@ venv.bak/
 .mypy_cache/
 
 .idea/
+# TeX files
+*.aux
+*.out
+*.pdf
+*.synctex.gz

@@ -1,7 +1,6 @@
 import requests
 import os.path
-
-from lxml import etree
+from PIL import Image
 
 import data
 
@@ -11,9 +10,11 @@ assignable_colors = [data.Color("blue"), data.Color("brown"), data.Color("cyan")
                      data.Color("yellow")]
 
 pixels_to_pt = {8: 6, 9: 7, 10: 7.5, 11: 8, 12: 9, 13: 10, 14: 10.5, 15: 11, 16: 12, 17: 13, 18: 13.5, 19: 14, 20: 14.5,
-                21: 15, 22: 16, 23: 17, 24: 18, 25: 19, 48: 36, 50: 37.5}
+                21: 15, 22: 16, 23: 17, 24: 18, 25: 19, 36: 27, 48: 36, 50: 37.5}
 
 no_newline_after_tags = ["blockquote"]
+
+DOC_WIDTH_PX = 264
 
 header = """\\documentclass[ebook,12pt,oneside,openany]{memoir}
 \\usepackage[T2A,T1]{fontenc}
@@ -30,6 +31,10 @@ header = """\\documentclass[ebook,12pt,oneside,openany]{memoir}
 \\usepackage{pifont}
 \\usepackage{amsmath,amssymb,latexsym}
 \\usepackage[normalem]{ulem}
+\\usepackage{arev}
+
+\\hypersetup{colorlinks=true,urlcolor=blue}
+\\urlstyle{same}
 
 \\newcommand{\\carat}{$\\char`\\^$}
 \\newcommand{\\mytexttilde}{\\raisebox{0.5ex}{\\texttildelow}}
@@ -79,18 +84,19 @@ def format_html(div, author: data.Author):
     to_ret += format_text(div.text)
     end = "\\end{tcolorbox}\n"
     newline_allowed = False
-    for i in range(len(div)):
-        element = div[i]
-        if element.tag == "blockquote":
-            to_ret += format_blockquote(element)
-            newline_allowed = False
-        elif element.tag == "p":
-            if newline_allowed:
-                to_ret += format_p(element, True)
-            else:
-                new_text = format_p(div[i], False)
-                newline_allowed = new_text.strip() != ""
-                to_ret += new_text
+    to_ret += format_children(div, False)
+    # for i in range(len(div)):
+    #     element = div[i]
+    #     if element.tag == "blockquote":
+    #         to_ret += format_blockquote(element)
+    #         newline_allowed = False
+    #     elif element.tag == "p":
+    #         if newline_allowed:
+    #             to_ret += format_p(element, True)
+    #         else:
+    #             new_text = format_p(div[i], False)
+    #             newline_allowed = new_text.strip() != ""
+    #             to_ret += new_text
     return to_ret + end
 
 
@@ -100,7 +106,7 @@ def format_text_tag(element, newline_allowed: bool):
     elif element.tag == "blockquote":
         return format_blockquote(element)
     elif element.tag == "span":
-        return format_span(element)
+        return format_span(element, newline_allowed)
     elif element.tag == "strong" or element.tag == "b":
         return format_strong(element)
     elif element.tag == "a":
@@ -108,9 +114,9 @@ def format_text_tag(element, newline_allowed: bool):
     elif element.tag == "img":
         return format_img(element)
     elif element.tag == "div":
-        return format_div(element)
+        return format_div(element, newline_allowed)
     elif element.tag == "br":
-        return format_br(element)
+        return format_br(element, newline_allowed)
     elif element.tag == "em" or element.tag == "i":
         return format_em(element)
     elif element.tag == "strike" or element.tag == "del":
@@ -131,16 +137,16 @@ def format_text_tag(element, newline_allowed: bool):
         print("ERROR: Unknown tag " + element.tag)
 
 
-def format_children(parent, initial_newline_allowed=True):
+def format_children(children, initial_newline_allowed=True):
     to_ret = ""
     newline_allowed = initial_newline_allowed
-    for i in range(len(parent)):
+    for i in range(len(children)):
         if newline_allowed:
-            to_ret += format_text_tag(parent[i], True)
-            newline_allowed = parent[i].tag not in no_newline_after_tags
+            to_ret += format_text_tag(children[i], True)
+            newline_allowed = children[i].tag not in no_newline_after_tags
         else:
-            new_text = format_text_tag(parent[i], False)
-            newline_allowed = new_text.strip() != "" and parent[i].tag not in no_newline_after_tags
+            new_text = format_text_tag(children[i], False)
+            newline_allowed = new_text.strip() != "" and children[i].tag not in no_newline_after_tags
             to_ret += new_text
     return to_ret
 
@@ -148,7 +154,7 @@ def format_children(parent, initial_newline_allowed=True):
 def format_p(p, newline_allowed: bool):
     if format_text(p.text).strip() == "" and len(p) == 0:
         if newline_allowed:
-            return "\\newline" + format_text(p.tail) + "\n"
+            return "\\newline{}" + format_text(p.tail) + "\n"
         elif format_text(p.tail).strip() == "":
             return ""
         else:
@@ -163,7 +169,7 @@ def format_p(p, newline_allowed: bool):
         else:
             print("ERROR: Unknown <p> attribute " + key)
     to_ret += format_text(p.text)
-    to_ret += format_children(p)
+    to_ret += format_children(p, initial_newline_allowed=False)
     return to_ret + end
 
 
@@ -250,7 +256,9 @@ def format_blockquote(blockquote):
     return to_ret + end
 
 
-def format_span(span):
+def format_span(span, newline_allowed: bool):
+    if "data-excludequote" in span.keys():
+        return ""
     to_ret = ""
     end = format_text(span.tail)
     for key in span.keys():
@@ -261,7 +269,7 @@ def format_span(span):
         else:
             print("ERROR: Unknown <span> attribute " + key)
     to_ret += format_text(span.text)
-    to_ret += format_children(span)
+    to_ret += format_children(span, initial_newline_allowed=(newline_allowed or format_text(span.text).strip() != ""))
     return to_ret + end
 
 
@@ -300,31 +308,35 @@ def format_img(img):
     to_ret = ""
     image_url = img.get("src")
     filename = image_url.split("/")[-1]
-    if not os.path.isfile(filename):
-        img_data = requests.get(image_url)
-        if img_data.status_code == 404:
-            if "alt" in img.keys():
-                to_ret += format_text(img.get("alt"))
+    filename = filename.replace("jpeg", "jpg")
+    dot_split = filename.split(".")
+    filename = dot_split[0] + "." + dot_split[1][:3]
+    filename = "images/" + filename
+    embed_output = embed_image(image_url, filename)
+    if embed_output == "":
+        if "alt" in img.keys():
+            to_ret += format_text(img.get("alt"))
         else:
-            with open(filename, 'wb') as handler:
-                handler.write(img_data.content)
-            print("Downloading image from " + image_url)
-            to_ret += "\\includegraphics{" + filename + "}"
+            to_ret += "[missing image]"
     else:
-        to_ret += "\\includegraphics{" + filename + "}"
+        to_ret += embed_output
+
     to_ret += format_text(img.tail)
     return to_ret
 
 
-def format_div(div):
+def format_div(div, newline_allowed: bool):
     to_ret = format_text(div.text)
-    to_ret += format_children(div)
+    to_ret += format_children(div, initial_newline_allowed=(newline_allowed or format_text(div.text).strip() != ""))
     to_ret += format_text(div.tail)
     return to_ret
 
 
-def format_br(br):
-    return "\\newline\n" + format_text(br.tail)
+def format_br(br, newline_allowed: bool):
+    if newline_allowed:
+        return "\\newline{}\n" + format_text(br.tail)
+    else:
+        return format_text(br.tail)
 
 
 def format_strike(strike):
@@ -346,8 +358,25 @@ def format_sup(sup):
 
 
 def format_iframe(iframe):
-    to_ret = "\\href{" + iframe.get("src") + "}{[Embedded Video]}"
-    return to_ret + format_text(iframe.tail) + "\n"
+    to_ret = ""
+    video_code = iframe.get("src").split("/")[-1]
+    video_code = video_code.split("?")[0]
+    embed_output = embed_image("https://img.youtube.com/vi/" + video_code + "/maxresdefault.jpg",
+                               "thumbnails/" + video_code + ".jpg")
+    if embed_output == "":
+        # Retry with HQ instead of maxres
+        embed_output = embed_image("https://img.youtube.com/vi/" + video_code + "/hqdefault.jpg",
+                                   "thumbnails/" + video_code + ".jpg")
+        if embed_output == "":
+            to_ret += "\\href{https://www.youtube.com/watch?v=" + video_code + "}{[Embedded Video]}"
+        else:
+            to_ret += "\\href{https://www.youtube.com/watch?v=" + video_code + "}{" + embed_output + "}"
+    else:
+        to_ret += "\\href{https://www.youtube.com/watch?v=" + video_code + "}{" + embed_output + "}"
+
+    to_ret += format_text(iframe.tail)
+    to_ret += "\n"
+    return to_ret
 
 
 def format_u(u):
@@ -384,6 +413,22 @@ def format_li(li):
     to_ret += "}\n"
     to_ret += format_text(li.tail)
     return to_ret
+
+
+def embed_image(image_url, filename):
+    if not os.path.isfile(filename):
+        img_data = requests.get(image_url)
+        if img_data.status_code == 404:
+            return ""
+        else:
+            with open(filename, 'wb') as handler:
+                handler.write(img_data.content)
+            print("Downloading image from " + image_url)
+
+    if Image.open(filename).size[0] > DOC_WIDTH_PX:
+        return "\\includegraphics[width=\\textwidth]{" + filename + "}"
+    else:
+        return "\\includegraphics{" + filename + "}"
 
 
 def format_text(text: str):

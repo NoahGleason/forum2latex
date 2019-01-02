@@ -1,9 +1,10 @@
 import urllib.request
+import datetime
 
 
 class Comment:
 
-    def __init__(self, author, text, date):
+    def __init__(self, author, text, date: datetime):
         self.author = author
         self.text = text
         self.date = date
@@ -11,7 +12,7 @@ class Comment:
     def get_author(self):
         return self.author
 
-    def get_date(self):
+    def get_date(self) -> datetime:
         return self.date
 
     def get_text(self):

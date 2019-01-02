@@ -18,6 +18,8 @@ no_newline_after_tags = ["blockquote"]
 
 DOC_WIDTH_PX = 264
 
+approx_chars_per_line = 37
+
 
 def set_colors(authors):
     # Deal with special cases
@@ -34,16 +36,16 @@ def set_colors(authors):
         sorted_authors[i].set_color(assignable_colors[i])
 
 
-def format_html(div, author: data.Author):
-    to_ret = "\\begin{tcolorbox}[title=" + format_text(author.get_name())
-    if author.has_color():
+def format_html(comment: data.Comment):
+    to_ret = "\\begin{tcolorbox}[title=" + format_text(comment.get_author().get_name())
+    to_ret += ",after title={\\hfill " + comment.get_date().strftime("%H:%M, %B %d, %Y") + "}"
+    if comment.get_author().has_color():
         to_ret += ","
-        to_ret += author.get_color().get_latex()
+        to_ret += comment.get_author().get_color().get_latex()
     to_ret += "]\n"
-    to_ret += format_text(div.text)
+    to_ret += format_text(comment.get_text().text)
     end = "\\end{tcolorbox}\n"
-    newline_allowed = False
-    to_ret += format_children(div, False)
+    to_ret += format_children(comment.get_text(), False)
     return to_ret + end
 
 
@@ -112,7 +114,7 @@ def format_p(p, newline_allowed: bool):
         if key == "style":
             style_output = format_style(p.get("style"))
             to_ret += style_output[0]
-            end += style_output[1]
+            end = style_output[1] + end
         else:
             print("ERROR: Unknown <p> attribute " + key)
     to_ret += format_text(p.text)
@@ -180,13 +182,19 @@ def format_style(style: str):
                     end = "\\end{huge}" + end
         elif attribute[:12] == "font-family:" or attribute[:12] == "margin-left:" or attribute == "text-align:justify" or attribute == "background-color:transparent":
             front += ""  # Do nothing
+        elif attribute[:11] == "text-align:":
+            if attribute[11:].lower() == "center":
+                front += "\\begin{center}"
+                end = "\\end{center}" + end
+            else:
+                print("WARNING: unknown text alignment "+attribute)
         elif attribute[:17] == "background-color:":
             if attribute[17:20] == "rgb":
                 rgb = attribute[21:-1]
                 front += "\\colorbox[RGB]{" + rgb + "}{"
                 end = "}" + end
             else:
-                print("Unknown background color encoding!")
+                print("Unknown background color encoding: "+attribute)
         elif attribute.strip() == "":
             front += ""
         else:
@@ -211,10 +219,12 @@ def format_span(span, newline_allowed: bool):
         if key == "style":
             style_output = format_style(span.get("style"))
             to_ret += style_output[0]
-            end += style_output[1]
+            end = style_output[1] + end
         else:
             print("ERROR: Unknown <span> attribute " + key)
     to_ret += format_text(span.text)
+    if to_ret.strip() != "" or end.strip() != "":  # If there's actual content
+        end += "\n"
     to_ret += format_children(span, initial_newline_allowed=(newline_allowed or format_text(span.text).strip() != ""))
     return to_ret + end
 
@@ -238,12 +248,15 @@ def format_em(em):
 
 
 def format_a(a):
-    # print(etree.tostring(a, method="html", encoding="unicode", pretty_print=True))
     to_ret = ""
     if a.get("href") is not None:
-        # to_ret += "\\href{" + a.get("href") + "}{"
         to_ret += "\\href{" + format_arguments(a.get("href")) + "}{"
-    to_ret += format_text(a.text)
+
+    if " " not in format_text(a.text) and len(format_text(a.text)) > approx_chars_per_line:
+        to_ret += "[link]"
+    else:
+        to_ret += format_text(a.text)
+
     to_ret += format_children(a)
     if a.get("href") is not None:
         to_ret += "}"
@@ -287,10 +300,18 @@ def format_img(img):
 def format_div(div, newline_allowed: bool):
     if div.get("class") == "ipsQuote_citation":
         return ""
-    to_ret = format_text(div.text)
+    to_ret = ""
+    end = format_text(div.tail)
+    for key in div.keys():
+        if key == "style":
+            style_output = format_style(div.get("style"))
+            to_ret += style_output[0]
+            end = style_output[1] + end
+    to_ret += format_text(div.text)
+    if to_ret.strip() != "" or end.strip() != "":  # If there's actual content
+        end += "\n"
     to_ret += format_children(div, initial_newline_allowed=(newline_allowed or format_text(div.text).strip() != ""))
-    to_ret += format_text(div.tail)
-    return to_ret
+    return to_ret + end
 
 
 def format_br(br, newline_allowed: bool):

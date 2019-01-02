@@ -5,7 +5,7 @@ from lxml import etree
 import latex
 
 
-def parse_date(datestring):
+def parse_date(datestring: str) -> datetime:
     # format: YYYY-MM-DDTHH:mm:SS+0000
     year = int(datestring[:4])
     month = int(datestring[5:7])
@@ -46,7 +46,7 @@ writer.write(header)
 count = 0
 for comment in comments:
     count += 1
-    writer.write(latex.format_html(comment.get_text(), comment.get_author()))
+    writer.write(latex.format_html(comment))
     # print("Finished comment "+str(count)+" of 8514 ("+str(count/8514 * 100.)+"%)")
     if count % 100 == 0:
         print("Finished comment {0} of 8514 ({1:.2f}%)".format(count, count/8514. * 100.))
